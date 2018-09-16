@@ -1,0 +1,388 @@
+---
+title: "A. thaliana"
+author: "Jiao"
+date: "2018年4月1日"
+output: html_document
+---
+## Explore data
+```{r,warning=TRUE}
+# set directory
+setwd("D:/PhD/Experiment Data/Data analysis/A. thaliana")
+
+# load data
+AT_plant_trait<-read.delim("AT_plant_trait.txt",header = TRUE)
+AT_spatial<-read.delim("AT_spatial.txt",header = TRUE)
+AT_nematode<-read.delim("AT_nematode.txt",header = TRUE)
+View(AT_plant_trait)
+View(AT_spatial)
+View(AT_nematode)
+
+# build workdata
+workdata<-data.frame(AT_spatial,AT_plant_trait[,-1],AT_nematode[,-1])
+View(workdata)
+
+# view outliers
+par(mfrow=c(4,2))
+dotchart(workdata$r50,main = "r50 scale")
+dotchart(workdata$r100,main = "r100 scale")
+dotchart(workdata$r200,main = "r200 scale")
+dotchart(workdata$r400,main = "r400 scale")
+dotchart(workdata$r800,main = "r800 scale")
+dotchart(workdata$r1600,main = "r1600 scale")
+dotchart(workdata$r2400,main = "r2400 scale")
+dotchart(workdata$r3200,main = "r3200 scale")
+dotchart(workdata$no_plant,main = "no. of plant within 1 radius")
+dotchart(workdata$ph,main = "plant height")
+dotchart(workdata$fsm,main = "fresh shoot biomass")
+dotchart(workdata$dsm,main = "dry shoot biomass")
+dotchart(workdata$shoot_moi,main = "shoot moisture")
+dotchart(workdata$frm,main = "fresh root biomass")
+dotchart(workdata$drm,main = "dry shoot biomass")
+dotchart(workdata$root_moi,main = "root moisture")
+dotchart(workdata$root.shoot,main = "(dry) root/shoot ratio")
+dotchart(workdata$no_flower,main = "no. of flowers")
+dotchart(workdata$no_fruit,main = "no. of fruits")
+dotchart(workdata$no_insect,main = "no. of insects")
+dotchart(workdata$no_seed,main = "no. of seeds")
+dotchart(workdata$soil_moi,main = "soil moisture")
+dotchart(workdata$BF,main = "bacteria feeder")
+dotchart(workdata$FF,main = "fungal feeder")
+dotchart(workdata$PL,main = "plant feeder")
+dotchart(workdata$PR,main = "predator feeder")
+dotchart(workdata$OM,main = "omnivor feeder")
+dotchart(workdata$UN,main = "unknown nematodes")
+dotchart(workdata$root_nem,main = "total no. of nematode")
+dev.off()
+
+
+## correlations among variables / collinearity
+library(corrplot)
+# pearson correlations
+round(cor(workdata[-(1:4)]),2)
+# visualize correlation matrix using correlogram
+col<-colorRampPalette(c("red","white","purple"))(10)
+corrplot(cor(workdata[-(1:4)]), type = "upper", order = "hclust",col = col,tl.col = "black",tl.srt = 45)
+# pairplot of all variables
+cor(workdata[-(1:4)],method = "spearman")
+pairs(~r50+r100+r200+r400+r800+r1600+r2400+r3200,data = workdata,main="8 spatial scales")
+
+## Spatial auto-correlation
+library(ncf)
+
+```
+
+
+### insect abundance with urbanisation
+```{r,warning=FALSE}
+# lm() model
+
+model50<-lm(no_insect~r50, data = workdata)
+summary(model50)
+model100<-lm(no_insect~r100, data = workdata)
+summary(model100)
+model200<-lm(no_insect~r200, data = workdata)
+summary(model200)
+model400<-lm(no_insect~r400, data = workdata)
+summary(model400)
+model800<-lm(no_insect~r800, data = workdata)
+summary(model800)
+model1600<-lm(no_insect~r1600, data = workdata)
+summary(model1600)
+model2400<-lm(no_insect~r2400, data = workdata)
+summary(model2400)
+model3200<-lm(no_insect~r3200, data = workdata)
+summary(model3200)
+
+# plot workdata
+par(mfrow=c(3,3))
+plot(workdata$r50,workdata$no_insect)
+abline(model50)
+plot(workdata$r100,workdata$no_insect)
+abline(model100)
+plot(workdata$r200,workdata$no_insect)
+abline(model200)
+plot(workdata$r400,workdata$no_insect)
+abline(model400)
+plot(workdata$r800,workdata$no_insect)
+abline(model800)
+plot(workdata$r1600,workdata$no_insect)
+abline(model1600)
+plot(workdata$r2400,workdata$no_insect)
+abline(model2400)
+plot(workdata$r3200,workdata$no_insect)
+abline(model3200)
+
+# Results form lm() and plots, indicate number of insects significantly increases with urbanisation, especially at small spatial scales. While all R squares are low, which means urbanisation only account for a part. Also, they are count number, glm() might be better for modelling their correlations.
+
+# glm() model
+model50_1<-glm(no_insect~r50, data = workdata, family = "poisson")
+summary(model50_1)
+model100_1<-glm(no_insect~r100, data = workdata, family = "poisson")
+summary(model100_1)
+model200_1<-glm(no_insect~r200, data = workdata, family = "poisson")
+summary(model200_1)
+model400_1<-glm(no_insect~r400, data = workdata, family = "poisson")
+summary(model400_1)
+model800_1<-glm(no_insect~r800, data = workdata, family = "poisson")
+summary(model800_1)
+model1600_1<-glm(no_insect~r1600, data = workdata, family = "poisson")
+summary(model1600_1)
+model2400_1<-glm(no_insect~r2400, data = workdata, family = "poisson")
+summary(model2400_1)
+model3200_1<-glm(no_insect~r3200, data = workdata, family = "poisson")
+summary(model3200_1)
+
+# Results from glm() indicate overdispersion, so we revise models with glm.nb() function.
+
+# glm.nb() model
+library("MASS")
+modelnull<-glm.nb(no_insect~NULL,data = workdata)
+summary(modelnull)
+model50_2<-glm.nb(no_insect~r50, data = workdata)
+summary(model50_2)
+model100_2<-glm.nb(no_insect~r100, data = workdata)
+summary(model100_2)
+model200_2<-glm.nb(no_insect~r200, data = workdata)
+summary(model200_2)
+model400_2<-glm.nb(no_insect~r400, data = workdata)
+summary(model400_2)
+model800_2<-glm.nb(no_insect~r800, data = workdata)
+summary(model800_2)
+model1600_2<-glm.nb(no_insect~r1600, data = workdata)
+summary(model1600_2)
+model2400_2<-glm.nb(no_insect~r2400, data = workdata)
+summary(model2400_2)
+model3200_2<-glm.nb(no_insect~r3200, data = workdata)
+summary(model3200_2)
+
+# We can see from the results that glm.nb() function modify overdispersion problem. Except for the largest scale of 3200 m, all other scales of urbanisation positivly impact insect abundance remarkably. Then we adopt AIC indices to select the best one model.
+
+# Model selection
+
+# extract AIC parameters
+names(modelnull)
+names(model50_2)
+names(model100_2)
+names(model200_2)
+names(model400_2)
+names(model800_2)
+names(model1600_2)
+names(model2400_2)
+names(model3200_2)
+aicnull<-modelnull$aic
+aic50<-model50_2$aic
+aic100<-model100_2$aic
+aic200<-model200_2$aic
+aic400<-model400_2$aic
+aic800<-model800_2$aic
+aic1600<-model1600_2$aic
+aic2400<-model2400_2$aic
+aic3200<-model3200_2$aic
+aic<-c(aicnull,aic50,aic100,aic200,aic400,aic800,aic1600,aic2400,aic3200)
+urbanisation<-c(1:9)
+plot(urbanisation, aic)
+abline(lm(aic~urbanisation))
+lines(lowess(urbanisation,aic),col="blue")
+scales<- c("null","r50","r100","r200","r400","r800","r1600","r2400","r3200")
+axis(1, at=seq(1,9,1),labels = scales)
+
+# From the AIC plot, model at 50m scale is best. So plot model50.
+
+# plot 50m model
+model50_2<-glm.nb(no_insect~r50, data = workdata)
+newscale<-data.frame(seq(from=min(workdata$r50),to=max(workdata$r50),by=1))
+r50<-workdata$r50
+pred<-predict(model50_2, newdata = newscale, se.fit = TRUE, type = "response")
+plot(workdata$r50,workdata$no_insect)
+lines(newscale,pred)
+lines(lowess(workdata$r50,workdata$no_insect),col="blue")
+```
+
+
+### Insect pressure
+```{r,warning=FALSE}
+mod50<-glm(no_insect~r50+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod50)
+mod100<-glm(no_insect~r100+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod100)
+mod200<-glm(no_insect~r200+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod200)
+mod400<-glm(no_insect~r400+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod400)
+mod800<-glm(no_insect~r800+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod800)
+mod1600<-glm(no_insect~r1600+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod1600)
+mod2400<-glm(no_insect~r2400+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod2400)
+mod3200<-glm(no_insect~r3200+offset(log(fsm)),data = workdata,family = "poisson")
+summary(mod3200)
+
+# All of models show overdispersion, so we use quasipoisson to adjust them.
+
+mod50_1<-glm(no_insect~r50+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod50_1)
+mod100_1<-glm(no_insect~r100+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod100_1)
+mod200_1<-glm(no_insect~r200+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod200_1)
+mod400_1<-glm(no_insect~r400+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod400_1)
+mod800_1<-glm(no_insect~r800+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod800_1)
+mod1600_1<-glm(no_insect~r1600+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod1600_1)
+mod2400_1<-glm(no_insect~r2400+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod2400_1)
+mod3200_1<-glm(no_insect~r3200+offset(log(fsm)),data = workdata,family = "quasipoisson")
+summary(mod3200_1)
+
+# quasipoisson did not reduce overdispersion, then we use glm.nb() model.
+modnull<-glm.nb(no_insect~Null+offset(log(fsm)),data = workdata)
+summary(modnull)
+mod50_2<-glm.nb(no_insect~r50+offset(log(fsm)),data = workdata)
+summary(mod50_2)
+mod100_2<-glm.nb(no_insect~r100+offset(log(fsm)),data = workdata)
+summary(mod100_2)
+mod200_2<-glm.nb(no_insect~r200+offset(log(fsm)),data = workdata)
+summary(mod200_2)
+mod400_2<-glm.nb(no_insect~r400+offset(log(fsm)),data = workdata)
+summary(mod400_2)
+mod800_2<-glm.nb(no_insect~r800+offset(log(fsm)),data = workdata)
+summary(mod800_2)
+mod1600_2<-glm.nb(no_insect~r1600+offset(log(fsm)),data = workdata)
+summary(mod1600_2)
+mod2400_2<-glm.nb(no_insect~r2400+offset(log(fsm)),data = workdata)
+summary(mod2400_2)
+mod3200_2<-glm.nb(no_insect~r3200+offset(log(fsm)),data = workdata)
+summary(mod3200_2)
+
+# It is obvious that the overdispersion is reduced.
+
+# Model selection
+
+# extract AIC parameters
+
+names(model50_2)
+names(model100_2)
+names(model200_2)
+names(model400_2)
+names(model800_2)
+names(model1600_2)
+names(model2400_2)
+names(model3200_2)
+
+aic50<-model50_2$aic
+aic100<-model100_2$aic
+aic200<-model200_2$aic
+aic400<-model400_2$aic
+aic800<-model800_2$aic
+aic1600<-model1600_2$aic
+aic2400<-model2400_2$aic
+aic3200<-model3200_2$aic
+aic<-c(aic50,aic100,aic200,aic400,aic800,aic1600,aic2400,aic3200)
+urbanisation<-c(1:8)
+plot(urbanisation, aic)
+abline(lm(aic~urbanisation))
+lines(lowess(urbanisation,aic),col="blue")
+scales<- c("r50","r100","r200","r400","r800","r1600","r2400","r3200")
+axis(1, at=seq(1,8,1),labels = scales)
+
+# From the AIC plot, model at 50m scale is best. So plot model50.
+
+# plot 50m model
+mod50_2<-glm.nb(no_insect~r50+offset(log(fsm)),data = workdata)
+newscale<-data.frame(seq(from=min(workdata$r50),to=max(workdata$r50),by=1))
+
+pred<-predict(model50_2, newdata = newscale, se.fit = TRUE, type = "response")
+plot(workdata$r50,workdata$no_insect)
+lines(newscale,pred)
+lines(lowess(workdata$r50,workdata$no_insect),col="blue")
+```
+
+
+### plant biomass
+```{r,warning=FALSE}
+# glm()models
+
+mod50<-glm(fsm~r50,data = workdata)
+summary(mod50)
+mod100<-glm(fsm~r100,data = workdata)
+summary(mod100)
+mod200<-glm(fsm~r200,data = workdata)
+summary(mod200)
+mod400<-glm(fsm~r400,data = workdata)
+summary(mod400)
+mod800<-glm(fsm~r800,data = workdata)
+summary(mod800)
+mod1600<-glm(fsm~r1600,data = workdata)
+summary(mod1600)
+mod2400<-glm(fsm~r2400,data = workdata)
+summary(mod2400)
+mod3200<-glm(fsm~r3200,data = workdata)
+summary(mod3200)
+```
+
+
+### plant height
+```{r,warning=FALSE}
+# glm()models
+
+model50<-glm.nb(ph~r50,data = workdata)
+summary(model50)
+model100<-glm.nb(ph~r100,data = workdata)
+summary(model100)
+model200<-glm.nb(ph~r200,data = workdata)
+summary(model200)
+model400<-glm.nb(ph~r400,data = workdata)
+summary(model400)
+model800<-glm.nb(ph~r800,data = workdata)
+summary(model800)
+model1600<-glm.nb(ph~r1600,data = workdata)
+summary(model1600)
+model2400<-glm.nb(ph~r2400,data = workdata)
+summary(model2400)
+model3200<-glm.nb(ph~r3200,data = workdata)
+summary(model3200)
+
+# Model selection
+
+# extract AIC parameters
+names(model50)
+names(model100)
+names(model200)
+names(model400)
+names(model800)
+names(model1600)
+names(model2400)
+names(model3200)
+
+aic50<-model50$aic
+aic100<-model100$aic
+aic200<-model200$aic
+aic400<-model400$aic
+aic800<-model800$aic
+aic1600<-model1600$aic
+aic2400<-model2400$aic
+aic3200<-model3200$aic
+aic<-c(aic50,aic100,aic200,aic400,aic800,aic1600,aic2400,aic3200)
+urbanisation<-c(1:8)
+plot(urbanisation, aic)
+abline(lm(aic~urbanisation))
+lines(lowess(urbanisation,aic),col="blue")
+scales<- c("r50","r100","r200","r400","r800","r1600","r2400","r3200")
+axis(1, at=seq(1,8,1),labels = scales)
+
+# From the AIC plot, model at 1600m scale is best. So plot model1600.
+
+# plot 50m model
+model1600<-glm.nb(ph~r1600,data = workdata)
+newscale<-data.frame(seq(from=min(workdata$r1600),to=max(workdata$r1600),by=1))
+
+pred<-predict(model1600, newdata = newscale, se.fit = TRUE, type = "response")
+plot(workdata$r1600,workdata$ph)
+lines(newscale,pred, col="red", lwd=1)
+lines(newscale,pred)
+lines(lowess(workdata$r1600,workdata$ph),col="blue")
+```
+

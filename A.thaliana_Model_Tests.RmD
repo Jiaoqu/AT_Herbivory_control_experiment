@@ -1,0 +1,436 @@
+---
+title: "A.thaliana_Model_Tests"
+author: "Jiao"
+date: "2018年9月5日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+
+# **7. Differences of biomass along with urbanisation**
+
+Model: "difference between average biomass of a certain genotype in the herbivory and control treatment" ~ urbanization
+Test how the difference between herbivory and control changes with urbanization.
+
+```{r}
+# select working dataframe: "mass.geno.BU"(with means)
+
+# calculate difference of average biomass between herbivory and control treatment
+df <- data.frame(genotype = mass.geno.BU[mass.geno.BU$treatment == "C", "genotype"],
+                   df.BG = mass.geno.BU[mass.geno.BU$treatment == "C", "BG.biomass"] - mass.geno.BU[mass.geno.BU$treatment == "H", "BG.biomass"],
+                   df.AG = mass.geno.BU[mass.geno.BU$treatment == "C", "AG.biomass"] - mass.geno.BU[mass.geno.BU$treatment == "H", "AG.biomass"],
+                   df.rs = mass.geno.BU[mass.geno.BU$treatment == "C", "ratio"] - mass.geno.BU[mass.geno.BU$treatment == "H", "ratio"])
+
+# creat new working dataframe: merge "diff" and "BU"
+df.BU <- merge(df, BU, by = "genotype")
+View(df.BU)
+
+# model differences with urbanisation
+## at 50m scale
+lm.dfBG.50 <- lm(df.BG ~ d50, data = df.BU)
+summary(lm.dfBG.50)
+with(df.BU, plot(d50, df.BG))   ##plot
+abline(lm.dfBG.50)
+
+
+## Root biomass
+lm.dfBG.50 <- lm(df.BG ~ d50, data = df.BU)
+lm.dfBG.100 <- lm(df.BG ~ d100, data = df.BU)
+lm.dfBG.200 <- lm(df.BG ~ d200, data = df.BU)
+lm.dfBG.400 <- lm(df.BG ~ d400, data = df.BU)
+lm.dfBG.800 <- lm(df.BG ~ d800, data = df.BU)
+lm.dfBG.1600 <- lm(df.BG ~ d1600, data = df.BU)
+lm.dfBG.2400 <- lm(df.BG ~ d2400, data = df.BU)
+lm.dfBG.3200 <- lm(df.BG ~ d3200, data = df.BU)
+
+## shoot biomass
+lm.dfAG.50 <- lm(df.AG ~ d50, data = df.BU)
+lm.dfAG.100 <- lm(df.AG ~ d100, data = df.BU)
+lm.dfAG.200 <- lm(df.AG ~ d200, data = df.BU)
+lm.dfAG.400 <- lm(df.AG ~ d400, data = df.BU)
+lm.dfAG.800 <- lm(df.AG ~ d800, data = df.BU)
+lm.dfAG.1600 <- lm(df.AG ~ d1600, data = df.BU)
+lm.dfAG.2400 <- lm(df.AG ~ d2400, data = df.BU)
+lm.dfAG.3200 <- lm(df.AG ~ d3200, data = df.BU)
+
+## Root/shoot ratio
+lm.dfRS.50 <- lm(df.rs ~ d50, data = df.BU)
+lm.dfRS.100 <- lm(df.rs ~ d100, data = df.BU)
+lm.dfRS.200 <- lm(df.rs ~ d200, data = df.BU)
+lm.dfRS.400 <- lm(df.rs ~ d400, data = df.BU)
+lm.dfRS.800 <- lm(df.rs ~ d800, data = df.BU)
+lm.dfRS.1600 <- lm(df.rs ~ d1600, data = df.BU)
+lm.dfRS.2400 <- lm(df.rs ~ d2400, data = df.BU)
+lm.dfRS.3200 <- lm(df.rs ~ d3200, data = df.BU)
+
+
+## Model selection
+AIC(lm.dfBG.50, lm.dfBG.100, lm.dfBG.200, lm.dfBG.400, lm.dfBG.800, lm.dfBG.1600, lm.dfBG.2400, lm.dfBG.3200)   ## model d800 has lowest AIC value.
+AIC(lm.dfAG.50, lm.dfAG.100, lm.dfAG.200, lm.dfAG.400, lm.dfAG.800, lm.dfAG.1600, lm.dfAG.2400, lm.dfAG.3200)   ## model d800 has lowest AIC value.
+AIC(lm.dfRS.50, lm.dfRS.100, lm.dfRS.200, lm.dfRS.400, lm.dfRS.800, lm.dfRS.1600, lm.dfRS.2400, lm.dfRS.3200)   ## model d200 has lowest AIC value.
+
+## summarize best models
+summary(lm.dfBG.800)
+summary(lm.dfAG.800)
+summary(lm.dfRS.200)
+```
+
+Results:
+Although significant p-values of urbanisation are shown for shoot biomass (d800, p=0.04469) and root/shoot ratio (d200, p=0.0439), both models possess lower R2 (0.1805, 0.1821) and F values but larger residual standard errors compared to their means.
+
+# **8. Difference of urban and rural genotypes**
+
+Model: biomass ~ herbivory + genotype + herbivory x genotype + urbanization(categorical) + herbivory x urbanization(categorical)
+
+# **8.1 at 50m scale**
+
+```{r}
+# select working dataframes: "biomass_HT", "BU"
+
+# categorize as rural and urban groups
+urban50 <- BU %>% top_n(9, d50)      ###select the most urban genotypes
+urban50 <- cbind(habitat = "urban", urban50)      ###add a new column marked as "urban" habitat 
+
+rural50 <- BU %>% top_n(-9, d50)     ###select the most rural genotypes
+rural50 <- cbind(habitat = "rural", rural50)      ###add a new column marked as "rural" habitat 
+
+ru50 <- rbind(urban50, rural50)
+
+bm.BU.50 <- merge(biomass_HT, ru50, by = "genotype")
+View(bm.BU.50)
+
+# create model
+## shoot biomass
+mod.AG.ru50 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+summary(mod.AG.ru50)
+anova(mod.AG.ru50)
+
+## root biomass
+mod.BG.ru50 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+summary(mod.BG.ru50)
+anova(mod.BG.ru50)
+
+## root/shoot ratio
+mod.rs.ru50 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+summary(mod.rs.ru50)
+anova(mod.rs.ru50)
+```
+
+
+# **8.2 at 100m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban100 <- BU %>% top_n(9, d100)      ###select the most urban genotypes
+urban100 <- cbind(habitat = "urban", urban100)      ###add a new column marked as "urban" habitat 
+
+rural100 <- BU %>% top_n(-9, d100)     ###select the most rural genotypes
+rural100 <- cbind(habitat = "rural", rural100)      ###add a new column marked as "rural" habitat 
+
+ru100 <- rbind(urban100, rural100)
+
+bm.BU.100 <- merge(biomass_HT, ru100, by = "genotype")
+
+# create model
+## shoot biomass
+mod.AG.ru100 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.100)
+
+## root biomass
+mod.BG.ru100 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.100)
+
+## root/shoot ratio
+mod.rs.ru100 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.100)
+
+```
+
+
+# **8.3 at 200m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban200 <- BU %>% top_n(9, d200)      ###select the most urban genotypes
+urban200 <- cbind(habitat = "urban", urban200)      ###add a new column marked as "urban" habitat 
+
+rural200 <- BU %>% top_n(-9, d200)     ###select the most rural genotypes
+rural200 <- cbind(habitat = "rural", rural200)      ###add a new column marked as "rural" habitat 
+
+ru200 <- rbind(urban200, rural200)
+
+bm.BU.200 <- merge(biomass_HT, ru200, by = "genotype")
+
+# create model
+## shoot biomass
+mod.AG.ru200 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.200)
+
+## root biomass
+mod.BG.ru200 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.200)
+
+## root/shoot ratio
+mod.rs.ru200 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.200)
+
+```
+
+
+
+# **8.4 at 400m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban400 <- BU %>% top_n(9, d400)      ###select the most urban genotypes
+urban400 <- cbind(habitat = "urban", urban400)      ###add a new column marked as "urban" habitat 
+
+rural400 <- BU %>% top_n(-9, d400)     ###select the most rural genotypes
+rural400 <- cbind(habitat = "rural", rural400)      ###add a new column marked as "rural" habitat 
+
+ru400 <- rbind(urban400, rural400)
+
+bm.BU.400 <- merge(biomass_HT, ru400, by = "genotype")
+
+# create model
+## shoot biomass
+mod.AG.ru400 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.400)
+
+## root biomass
+mod.BG.ru400 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.400)
+
+## root/shoot ratio
+mod.rs.ru400 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.400)
+
+```
+
+
+
+# **8.5 at 800m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban800 <- BU %>% top_n(9, d800)      ###select the most urban genotypes
+urban800 <- cbind(habitat = "urban", urban800)      ###add a new column marked as "urban" habitat 
+
+rural800 <- BU %>% top_n(-9, d800)     ###select the most rural genotypes
+rural800 <- cbind(habitat = "rural", rural800)      ###add a new column marked as "rural" habitat 
+
+ru800 <- rbind(urban800, rural800)
+
+bm.BU.800 <- merge(biomass_HT, ru800, by = "genotype")
+
+# create model
+## shoot biomass
+mod.AG.ru800 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.800)
+
+## root biomass
+mod.BG.ru800 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.800)
+
+## root/shoot ratio
+mod.rs.ru800 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.800)
+
+```
+
+
+# **8.6 at 1600m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban1600 <- BU %>% top_n(9, d1600)      ###select the most urban genotypes
+urban1600 <- cbind(habitat = "urban", urban1600)      ###add a new column marked as "urban" habitat 
+
+rural1600 <- BU %>% top_n(-9, d1600)     ###select the most rural genotypes
+rural1600 <- cbind(habitat = "rural", rural1600)      ###add a new column marked as "rural" habitat 
+
+ru1600 <- rbind(urban1600, rural1600)
+
+bm.BU.1600 <- merge(biomass_HT, ru1600, by = "genotype")
+
+# create model
+## shoot biomass
+mod.AG.ru1600 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.1600)
+
+## root biomass
+mod.BG.ru1600 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.1600)
+
+## root/shoot ratio
+mod.rs.ru1600 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.1600)
+
+```
+
+
+# **8.7 at 2400m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban2400 <- BU %>% top_n(9, d2400)      ###select the most urban genotypes
+urban2400 <- cbind(habitat = "urban", urban2400)      ###add a new column marked as "urban" habitat 
+
+rural2400 <- BU %>% top_n(-9, d2400)     ###select the most rural genotypes
+rural2400 <- cbind(habitat = "rural", rural2400)      ###add a new column marked as "rural" habitat 
+
+ru2400 <- rbind(urban2400, rural2400)
+
+bm.BU.2400 <- merge(biomass_HT, ru2400, by = "genotype")
+
+# create model
+## shoot biomass
+mod.AG.ru2400 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.2400)
+
+## root biomass
+mod.BG.ru2400 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.2400)
+
+## root/shoot ratio
+mod.rs.ru2400 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.2400)
+
+```
+
+
+
+# **8.8 at 3200m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban3200 <- BU %>% top_n(9, d3200)      ###select the most urban genotypes
+urban3200 <- cbind(habitat = "urban", urban3200)      ###add a new column marked as "urban" habitat 
+
+rural3200 <- BU %>% top_n(-9, d3200)     ###select the most rural genotypes
+rural3200 <- cbind(habitat = "rural", rural3200)      ###add a new column marked as "rural" habitat 
+
+ru3200 <- rbind(urban3200, rural3200)
+
+bm.BU.3200 <- merge(biomass_HT, ru3200, by = "genotype")
+
+# create model
+## shoot biomass
+mod.AG.ru3200 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.3200)
+
+## root biomass
+mod.BG.ru3200 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.3200)
+
+## root/shoot ratio
+mod.rs.ru3200 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.3200)
+
+```
+
+
+# **8.9 Select the best models based on AIC**
+
+```{r}
+AIC(mod.AG.ru50, mod.AG.ru100, mod.AG.ru200, mod.AG.ru400, mod.AG.ru800, mod.AG.ru1600, mod.AG.ru2400, mod.AG.ru3200)
+AIC(mod.BG.ru50, mod.BG.ru100, mod.BG.ru200, mod.BG.ru400, mod.BG.ru800, mod.BG.ru1600, mod.BG.ru2400, mod.BG.ru3200)
+AIC(mod.rs.ru50, mod.rs.ru100, mod.rs.ru200, mod.rs.ru400, mod.rs.ru800, mod.rs.ru1600, mod.rs.ru2400, mod.rs.ru3200)
+
+
+```
+
+Results:
+For shoot biomass, three models (1600m, 2400m and 3200m) have same lowest AIC value.
+For root biomass, five models (200m, 800m, 1600m, 2400m and 3200m) have same lowest AIC value.
+For root/shoot ratio, two models (200m and 800m) have same lowest AIC value.
+
+```{r}
+# summarize the best models
+summary(mod.AG.ru3200)
+summary(mod.BG.ru3200)
+summary(mod.rs.ru200)
+```
+
+Results:
+(1) For shoot biomass: Terms (treatment.C, habitat.urban) are not included in this model. There is remarkable difference among genotypes and difference in rural area. But the model yields low R2 (0.2495) and low F-value (12.9 on 5 and 174 DF) and larger Residual standard error (0.02752) compared to the mean biomass (0.0581).
+(2) For root biomass: Same results as shoot biomass are shown. Terms (treatment.C, habitat.urban) are not included in this model. There is remarkable difference among genotypes and difference in rural area. But the model yields low R2 (0.2418) and low F-value (12.42 on 5 and 174 DF) and larger Residual standard error (0.008017) compared to the mean biomass (1.415e-02).
+(3) For root/shoot ratio: Terms (treatment.C, habitat.urban) are not included in this model. Only difference in rural area is shown. But the model has very low R2 (0.0271).
+
+
+# **8.10 Plot the best models**
+
+```{r}
+# Calculate mean and sd:
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE),
+      se = sd(x[[col]])/sqrt(length(x)))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func, varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+
+View(bm.BU.1600)
+
+## plots at 1600m scale for root and shoot biomass
+sum.AG1600 <- data_summary(bm.BU.1600,
+                        varname = "AG.biomass",
+                        groupnames = c("habitat", "treatment"))
+
+sum.BG1600 <- data_summary(bm.BU.1600,
+                        varname = "BG.biomass",
+                        groupnames = c("habitat", "treatment"))
+
+
+
+
+p.modAG <- ggplot(sum.AG1600, aes(x = habitat, y = AG.biomass, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = AG.biomass - sd, ymax = AG.biomass + sd), width=.2,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass", x = "Habitat", y = "Shoot mass (mg)")
+
+p.modBG <- ggplot(sum.BG1600, aes(x = habitat, y = BG.biomass, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = BG.biomass - sd, ymax = BG.biomass + sd), width=.2,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass", x = "Habitat", y = "Root mass (mg)")
+
+
+p.modAG
+p.modBG
+
+## plot at 200m scale for root/shoot ratio
+sum.ratio200 <- data_summary(bm.BU.200,
+                        varname = "ratio",
+                        groupnames = c("habitat", "treatment"))
+
+p.modratio <- ggplot(sum.ratio200, aes(x = habitat, y = ratio, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = ratio - sd, ymax = ratio + sd), width=.2,
+                position = position_dodge(.9)) +
+  labs(title = "Root/shoot ratio", x = "Habitat", y = "root/shoot")
+p.modratio
+
+
+
+
+```
+
+
+# **9. Plot biomass and built-up ratio grouped by habitat and treatment**
+
+Plot all individual data.
+
+```{r}
+# categorize observations as "rural and urban groups" with treatment based on built-up ratio
+## Have done in "chapter7" and retrieve these dataframes
+bm.BU.50
+bm.BU.100
+bm.BU.200
+bm.BU.400
+bm.BU.800
+bm.BU.1600
+bm.BU.2400
+bm.BU.3200
+
+
+
+## plot them
+mod.AG.ru50 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+dp.AG50 <- ggplot(bm.BU.50, aes(x=d50, y=AG.biomass)) +
+  geom_point() 
+
+dp.AG50
+
+ggplot(bm.BU.50, aes(x=d50, y=AG.biomass, shape=habitat, color=treatment)) +
+  geom_point() +
+  geom_smooth(method="lm", se=FALSE)
+```
+

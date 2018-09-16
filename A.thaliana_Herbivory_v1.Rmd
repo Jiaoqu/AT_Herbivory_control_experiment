@@ -1,0 +1,1655 @@
+---
+title: "Herbivory_experiment_0824"
+author: "Jiao"
+date: "24 August 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+
+# **1. Aim**
+
+Explore data via plotting plant traits (biomass, number of trichome, absolute leaf area eaten by herbivores) and herbivore/caterpillar performance (relative growth rate/RGR) combining with spatial data.
+
+# **2. Data preparation**
+```{r, warning=FALSE}
+# load library
+library(tidyverse)
+
+# read data
+
+## caterpillar weight in 4 days
+caterpillar <- read.csv("caterpillar.wt_HT.csv", header = TRUE)
+View(caterpillar)
+## calculate RGR
+cater.RGR <- caterpillar %>%
+  mutate(RGR = (log(d5/d1)) / (5-1))
+View(cater.RGR)
+
+## number of trichome
+trichome <- read.csv("no.trichomes_HT.csv", header = TRUE)
+View(trichome)
+
+## plant above- and belowground biomass
+plant.biomass <- read.csv("plant.biomass_HT.csv", header = TRUE)
+plant.biomass <- merge(plant.biomass, trichome, by=c("genotype", "replicate", "treatment"))
+
+## leaf area
+area.C <- read.csv("area_control.csv", header = TRUE)
+View(area.C)
+area.H <- read.csv("area_herbivory.csv", header = TRUE)
+View(area.H)
+
+# read spatial data
+BU <- read.csv("mother_BU.csv", header = TRUE)
+View(BU)
+```
+
+
+
+# **3. Correlations and changes of variables**
+
+# **3.1 Correlations of variables**
+
+Correlations among relative growth rate (RGR) of caterpillars and number of trichomes, absolute leaf area damaged by caterpillars.
+
+```{r}
+# select values of trichomes from herbivore treatment
+trichome.H <- filter(trichome, treatment == "H")
+View(trichome.H)
+
+# create new working dataframe combining three variables: relative growth rate (RGR) of caterpillars, number of trichomes, absolute leaf area damaged by caterpillars.
+herbivory <- merge(cater.RGR, trichome.H, by = c("genotype", "replicate"))
+herbivory <- merge(herbivory, area.H, by = c("genotype", "replicate"))
+herbivory <- cbind(cater.RGR, trichome.H[4], area.H[,-(1:3)])
+View(herbivory)
+herbivory$genotype <- as.factor(herbivory$genotype)
+
+# correlations of RGR, number of trichome, parameters related to leaf area
+cor.herbivory <- select(herbivory, RGR, trichome, area.undamaged, area.total, area.damaged, perc.damaged)
+round(cor(cor.herbivory), 2)
+
+cor.test(herbivory$trichome, herbivory$RGR)
+cor.test(herbivory$area.damaged, herbivory$RGR)
+cor.test(herbivory$trichome, herbivory$area.damaged)
+
+# plot in one single image
+newdata <- herbivory[, c(1,8:9,12)]
+plot(newdata[,-1], pch=16)
+
+# make scatterplots colored by "genotype"
+library(ggplot2)
+ggplot(herbivory, aes(trichome, RGR, color=genotype)) +
+  geom_point() +
+  labs(title = "Scatterplot of caterpillar RGR and number of trichome", x = "number of trichome", y = "RGR")
+
+ggplot(herbivory, aes(area.damaged, RGR, color=genotype)) +
+  geom_point() +
+  labs(title = "Scatterplot of caterpillar RGR and leaf area damaged by caterpillar", x = "absolute leaf area damaged", y = "RGR")
+
+ggplot(herbivory, aes(trichome, area.damaged, color=genotype)) +
+  geom_point() +
+  labs(title = "Scatterplot of leaf area damaged by caterpillar and number of trichome", x = "number of trichome", y = "absolute leaf area damaged")
+
+
+```
+
+Results:
+There is small positive correlations between RGR of caterpillars with absolute leaf area damaged by caterpillars (p = 0.11) and small negative correlation with number of trichome (p = -0.08), while a significant negative correlation between absolute leaf area damaged by caterpillars and number of trichome (p = -0.30).
+
+
+# **3.2 Changes of variables with urbanisation**
+
+Changes of relative growth rate (RGR) of caterpillars, number of trichomes, absolute leaf area damaged by caterpillars, per genotype ordered by urbanisation at different spatial scales.
+
+```{r}
+# How RGR, leaf area damaged by herbivores, number of trichome per genotype with urbanisation. Make scatterplots.
+  
+# Select available dataframes: "herbivory" ,"trichome".
+# Summarize the mean and sd.
+library(plyr)
+mRGR.area <- ddply(herbivory, "genotype", summarise,
+                   mRGR = mean(RGR),
+                   sd.RGR = sd(RGR),
+                   marea = mean(area.damaged),
+                   sd.area = sd(area.damaged)
+                   )
+
+
+mtric <- ddply(trichome, c("genotype", "treatment"), summarise,
+                   mtric = mean(trichome),
+                   sd.tric =sd(trichome)
+                   )
+
+
+# add spatial data
+mRGR.area.BU <- merge(mRGR.area, BU, by="genotype")
+
+mtric.BU <- merge(mtric, BU, by="genotype")
+mtric.BU$genotype <- factor(mtric.BU$genotype)
+
+
+
+```
+
+# **3.2.1 At 50m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d50) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d50) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR50 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 50m scale", x="Genotype", y="Mean RGR")
+p.RGR50
+
+p.area50 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 50m scale", x="Genotype", y="Mean leaf area damaged")
+p.area50
+
+
+p.tric50 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 50m scale", x="Genotype", y="Number of trichome")
+p.tric50
+```
+
+
+# **3.2.2 At 100m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d100) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d100) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR100 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 100m scale", x="Genotype", y="Mean RGR")
+p.RGR100
+
+p.area100 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 100m scale", x="Genotype", y="Mean leaf area damaged")
+p.area100
+
+p.tric100 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 100m scale", x="Genotype", y="Number of trichome")
+p.tric100
+```
+
+
+# **3.2.3 At 200m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d200) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d200) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR200 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 200m scale", x="Genotype", y="Mean RGR")
+p.RGR200
+
+p.area200 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 200m scale", x="Genotype", y="Mean leaf area damaged")
+p.area200
+
+p.tric200 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 200m scale", x="Genotype", y="Number of trichome")
+p.tric200
+```
+
+
+
+# **3.2.4 At 400m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d400) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d400) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR400 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 400m scale", x="Genotype", y="Mean RGR")
+p.RGR400
+
+p.area400 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 400m scale", x="Genotype", y="Mean leaf area damaged")
+p.area400
+
+p.tric400 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 400m scale", x="Genotype", y="Number of trichome")
+p.tric400
+```
+
+
+# **3.2.5 At 800m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d800) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d800) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR800 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 800m scale", x="Genotype", y="Mean RGR")
+p.RGR800
+
+p.area800 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 800m scale", x="Genotype", y="Mean leaf area damaged")
+p.area800
+
+p.tric800 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 800m scale", x="Genotype", y="Number of trichome")
+p.tric800
+```
+
+
+# **3.2.6 At 1600m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d1600) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d1600) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR1600 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 1600m scale", x="Genotype", y="Mean RGR")
+p.RGR1600
+
+p.area1600 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 1600m scale", x="Genotype", y="Mean leaf area damaged")
+p.area1600
+
+p.tric1600 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 1600m scale", x="Genotype", y="Number of trichome")
+p.tric1600
+```
+
+
+# **3.2.7 At 2400m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d2400) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d2400) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR2400 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 2400m scale", x="Genotype", y="Mean RGR")
+p.RGR2400
+
+p.area2400 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 2400m scale", x="Genotype", y="Mean leaf area damaged")
+p.area2400
+
+p.tric2400 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 2400m scale", x="Genotype", y="Number of trichome")
+p.tric2400
+```
+
+
+# **3.2.8 At 3200m scale**
+
+```{r}
+# order genotypes by urbanisation
+mRGR.area.BU <- mRGR.area.BU %>% arrange(d3200) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+mtric.BU <- mtric.BU %>% arrange(d3200) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+# make error bar plots
+p.RGR3200 <- ggplot(mRGR.area.BU, aes(x=genotype, y=mRGR)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mRGR-sd.RGR, ymax=mRGR+sd.RGR), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of RGR with urbanisation at 3200m scale", x="Genotype", y="Mean RGR")
+p.RGR3200
+
+p.area3200 <- ggplot(mRGR.area.BU, aes(x=genotype, y=marea)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=marea-sd.area, ymax=marea+sd.area), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of leaf area damaged by herbivores with urbanisation at 3200m scale", x="Genotype", y="Mean leaf area damaged")
+p.area3200
+
+p.tric3200 <- ggplot(mtric.BU, aes(x=genotype, y=mtric, fill=treatment)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mtric-sd.tric, ymax=mtric+sd.tric), width=.4,
+                position = position_dodge(.9)) +
+  labs(title="Change of number of trichome with urbanisation at 3200m scale", x="Genotype", y="Number of trichome")
+p.tric3200
+```
+
+Results:
+Visually, 
+(1) RGR does not differ among genotypes. 
+
+(2) Leaf area damaged by herbivore differs among genotypes and if they show bell curves for urban and rural genotypes, respectively. 
+
+(3) Number of trichome differs among genotypes but not between herbivory treatment. Genotypes from rural area have more trichome than that from urban area.
+
+# **3.2.9 Compute one-way ANOVA test**
+
+
+
+```{r}
+# dataframes: "herbivory", "trichome"
+# Compute the analysis of variance
+area.aov <- aov(area.damaged ~ genotype, data = herbivory)
+summary(area.aov)
+
+RGR.aov <- aov(RGR ~ genotype, data = herbivory)
+summary(RGR.aov)
+
+trichome$genotype <- as.factor(trichome$genotype)
+tric.aov <- aov(trichome ~ genotype+treatment, data = trichome)
+summary(tric.aov)
+
+# categorize as rural and urban groups
+urban50 <- BU %>% top_n(9, d50)      ###select the most urban genotypes
+urban50 <- cbind(habitat = "urban", urban50)      ###add a new column marked as "urban" habitat 
+
+rural50 <- BU %>% top_n(-9, d50)     ###select the most rural genotypes
+rural50 <- cbind(habitat = "rural", rural50)      ###add a new column marked as "rural" habitat 
+
+ru50 <- rbind(urban50, rural50)
+
+tric.BU.50 <- merge(trichome, ru50, by = "genotype")
+View(tric.BU.50)
+# Difference of trichome number between urban and rural genotypes
+tric.aov1 <- aov(trichome ~ habitat, data = tric.BU.50)
+summary(tric.aov1)
+```
+
+Results:
+(1) Differences are shown for "leaf area damaged by herbivores" and "number of trichome" among different genotypes, but not for "relative growth rate of herbivore".
+
+(2) "Number of trichome" does not differ in herbivory and control treatments. 
+
+(3) "Number of trichome" differs between urban and rural genotypes, and genotypes from rural area have more trichome than that from urban area.
+
+
+# **4. Model variables with urbanisation**
+
+Model: variables ~ urbanisation
+
+# **4.1. Absolute leaf area damaged by caterpillars**
+
+Make scatterplots of built-up ratio with absolute leaf damage by caterpillars.
+
+```{r}
+# add spatial data to herbivory data
+herbivory.BU <- merge(herbivory, BU, by = "genotype")
+View(herbivory.BU)
+```
+
+
+# **4.1.1. Based on all observations**
+
+```{r}
+herbivory.BU$genotype <- as.factor(herbivory.BU$genotype)
+# gather data by radii
+herbivory.BU.L <- gather(herbivory.BU, `d50`, `d100`, `d200`, `d400`, `d800`, `d1600`, `d2400`, `d3200`, 
+       key = "radii", value = "ratio.bu")
+View(herbivory.BU.L)
+
+# create plot
+p.dama <- ggplot(herbivory.BU.L) +
+  geom_point(mapping = aes(x = ratio.bu, y = area.damaged, colour = genotype)) +
+  facet_wrap(~ radii, nrow = 3) +
+  labs(title = "Absolute leaf area damaged by caterpillars at 8 radii scales", x = "BU%", y = "Absolute leaf area damaged") +
+  geom_smooth(mapping = aes(x = ratio.bu, y = area.damaged), method='lm')
+p.dama
+
+
+#make lm models
+mod.leaf50 <- lm(herbivory.BU, formula = area.damaged ~ d50)
+mod.leaf100 <- lm(herbivory.BU, formula = area.damaged ~ d100)
+mod.leaf200 <- lm(herbivory.BU, formula = area.damaged ~ d200)
+mod.leaf400 <- lm(herbivory.BU, formula = area.damaged ~ d400)
+mod.leaf800 <- lm(herbivory.BU, formula = area.damaged ~ d800)
+mod.leaf1600 <- lm(herbivory.BU, formula = area.damaged ~ d1600)
+mod.leaf2400 <- lm(herbivory.BU, formula = area.damaged ~ d2400)
+mod.leaf3200 <- lm(herbivory.BU, formula = area.damaged ~ d3200)
+
+AIC(mod.leaf50, mod.leaf100, mod.leaf200, mod.leaf400, mod.leaf800, mod.leaf1600, mod.leaf2400, mod.leaf3200)   #d200 has lowest AIC score.
+summary(mod.leaf200)
+
+# visualize residuals and fitted values.
+plot(mod.leaf200, pch=16, which=1)
+
+
+
+
+```
+
+Results:
+By making 'lm' models at different spatial scales and then comparing the AIC values of all models on 'absolute leaf area damaged by caterpillars', the result shows that the model at 200m scale, with positive and significant linear correlation  (p=0.0327) of absolute leaf area damaged by caterpillars and urbanisation, is best.
+
+(1) Visually the scaterplots indicate the relationship between absolute leaf area damaged by caterpillars and urbanisation do not follow straight lines.
+
+(2) Although a significant p-value (p=0.0327) is observed at d200 scale, the model generated yields a very low R2 (0.04).
+
+(3) The residual standard error (103.4) is quite large compared with the mean biomass value (143.6032).
+
+All results indicate a non-linear relationship exits between 'absolute leaf area damaged by caterpillars' and urbanisation.
+
+
+# **4.1.2. Based on average data for each mother plant**
+```{r}
+# calculate the mean: summarise()
+mean.dama <- ddply(herbivory.BU, "genotype", summarise,
+                   mean.dama = mean(area.damaged)
+                   )
+
+# combine spatial data and means of absolute leaf area damaged by caterpillars
+dama.BU <- merge(mean.dama, BU, by = "genotype")
+View(dama.BU)
+
+# gather data 
+dama.BU.L <- gather(dama.BU, `d50`, `d100`, `d200`, `d400`, `d800`, `d1600`, `d2400`, `d3200`, 
+       key = "radii", value = "ratio.bu")
+View(dama.BU.L)
+
+# create plot
+p.mdama <- ggplot(dama.BU.L) +
+  geom_point(mapping = aes(x = ratio.bu, y = mean.dama, colour = genotype)) +
+  facet_wrap(~ radii, nrow = 3) +
+  labs(title = "Mean absolute leaf area damaged by caterpillars at 8 radii scales", x = "BU%", y = "Absolute leaf area damaged") +
+  geom_smooth(mapping = aes(x = ratio.bu, y = mean.dama), method='lm')
+p.mdama
+
+
+#make lm models
+mod.mleaf50 <- lm(dama.BU, formula = mean.dama ~ d50)
+mod.mleaf100 <- lm(dama.BU, formula = mean.dama ~ d100)
+mod.mleaf200 <- lm(dama.BU, formula = mean.dama ~ d200)
+mod.mleaf400 <- lm(dama.BU, formula = mean.dama ~ d400)
+mod.mleaf800 <- lm(dama.BU, formula = mean.dama ~ d800)
+mod.mleaf1600 <- lm(dama.BU, formula = mean.dama ~ d1600)
+mod.mleaf2400 <- lm(dama.BU, formula = mean.dama ~ d2400)
+mod.mleaf3200 <- lm(dama.BU, formula = mean.dama ~ d3200)
+
+AIC(mod.mleaf50, mod.mleaf100, mod.mleaf200, mod.mleaf400, mod.mleaf800, mod.mleaf1600, mod.mleaf2400, mod.mleaf3200)   #d200 has lowest AIC score.
+summary(mod.mleaf200)
+# visualize residuals and fitted values.
+plot(mod.mleaf200, pch=16, which=1)
+```
+
+Results:
+By making 'lm' models at different spatial scales and then comparing the AIC values of all models on 'mean absolute leaf area damaged by caterpillars', the result shows that the model still at 200m scale, with positive but not significant linear correlation  (p=0.2198) of mean absolute leaf area damaged by caterpillars and urbanisation, is best, but with very low R2 and large residual standard error.
+
+# **4.2. Relative growth rate of caterpillars(RGR)**
+
+Make scatterplots of built-up ratio and relative growth rate of caterpillars(RGR).
+
+# **4.2.1. Based on all observations**
+
+```{r}
+# use available dataframe "herbivory.BU.L"
+## create plots of RGR and spatial scales based on all individual obserations
+
+
+# create plot
+p.RGR <- ggplot(herbivory.BU.L) +
+  geom_point(mapping = aes(x = ratio.bu, y = RGR, colour = genotype)) +
+  facet_wrap(~ radii, nrow = 3) +
+  labs(title = "RGR of caterpillar at 8 radii scales", x = "BU%", y = "RGR") +
+  geom_smooth(mapping = aes(x = ratio.bu, y = RGR), method='lm')
+p.RGR
+
+
+#make lm models
+mod.RGR50 <- lm(herbivory.BU, formula = RGR ~ d50)
+mod.RGR100 <- lm(herbivory.BU, formula = RGR ~ d100)
+mod.RGR200 <- lm(herbivory.BU, formula = RGR ~ d200)
+mod.RGR400 <- lm(herbivory.BU, formula = RGR ~ d400)
+mod.RGR800 <- lm(herbivory.BU, formula = RGR ~ d800)
+mod.RGR1600 <- lm(herbivory.BU, formula = RGR ~ d1600)
+mod.RGR2400 <- lm(herbivory.BU, formula = RGR ~ d2400)
+mod.RGR3200 <- lm(herbivory.BU, formula = RGR ~ d3200)
+
+AIC(mod.RGR50, mod.RGR100, mod.RGR200, mod.RGR400, mod.RGR800, mod.RGR1600, mod.RGR2400, mod.RGR3200)     #### d100 has lowest AIC score.
+summary(mod.RGR100)
+
+```
+
+
+Results:
+By making 'lm' models at different spatial scales and then comparing the AIC values of all models on 'relative growth rate of caterpillars(RGR)', the result shows that the model at 100m scale, with positive but not significant linear correlation  (p=0.3122) of RGR of caterpillars and urbanisation, is best.
+Scatterplots are dispersed, but with very low R2.
+
+# **4.2.2. Based on average data on RGR of each mother plant**
+
+```{r}
+# calculate mean RGR of caterpillars
+mean.RGR <- ddply(herbivory.BU, "genotype", summarise,
+                  mean.RGR = mean(RGR)
+                  )
+
+
+# combine spatial data with data on mean RGR
+RGR.BU <- merge(mean.RGR, BU, by = "genotype")
+View(RGR.BU)
+
+# gather data 
+RGR.BU.L <- gather(RGR.BU, `d50`, `d100`, `d200`, `d400`, `d800`, `d1600`, `d2400`, `d3200`, 
+       key = "radii", value = "ratio.bu")
+View(RGR.BU.L)
+
+# create the plot
+p.mRGR <- ggplot(RGR.BU.L) +
+  geom_point(mapping = aes(x = ratio.bu, y = mean.RGR, colour = genotype)) +
+  facet_wrap(~ radii, nrow = 3) +
+  labs(title = "Mean RGR of caterpillar at 8 radii scales", x = "BU%", y = "mean RGR") +
+  geom_smooth(mapping = aes(x = ratio.bu, y = mean.RGR), method = 'lm')
+p.mRGR
+
+#make lm models
+mod.mRGR50 <- lm(RGR.BU, formula = mean.RGR ~ d50)
+mod.mRGR100 <- lm(RGR.BU, formula = mean.RGR ~ d100)
+mod.mRGR200 <- lm(RGR.BU, formula = mean.RGR ~ d200)
+mod.mRGR400 <- lm(RGR.BU, formula = mean.RGR ~ d400)
+mod.mRGR800 <- lm(RGR.BU, formula = mean.RGR ~ d800)
+mod.mRGR1600 <- lm(RGR.BU, formula = mean.RGR ~ d1600)
+mod.mRGR2400 <- lm(RGR.BU, formula = mean.RGR ~ d2400)
+mod.mRGR3200 <- lm(RGR.BU, formula = mean.RGR ~ d3200)
+
+AIC(mod.mRGR50, mod.mRGR100, mod.mRGR200, mod.mRGR400, mod.mRGR800, mod.mRGR1600, mod.mRGR2400, mod.mRGR3200)     #### d100 has lowest AIC score.
+summary(mod.mRGR100)
+
+```
+
+Results:
+By making 'lm' models at different spatial scales and then comparing the AIC values of all models on 'mean relative growth rate of caterpillars(RGR)', the result shows that the model still at 100m scale, with positive but not significant linear correlation  (p=0.1715) of mean RGR of caterpillars and urbanisation, is best but with very low R2.
+
+
+# **4.3. Number of trichome**
+
+Make scatterplots of built-up ratio and number of trichome.
+
+# **4.3.1. Based on all observations**
+
+```{r}
+# use available dataframe "herbivory.BU.L"
+## create plots of number of trichome and spatial scales based on all individual obserations
+
+
+# create plot
+p.tric <- ggplot(herbivory.BU.L) +
+  geom_point(mapping = aes(x = ratio.bu, y = trichome, colour = genotype)) +
+  facet_wrap(~ radii, nrow = 3) +
+  labs(title = "Number of trichome at 8 radii scales", x = "BU%", y = "Number of trichome") +
+  geom_smooth(mapping = aes(x = ratio.bu, y = trichome), method='lm')
+p.tric
+
+
+#make lm models
+mod.tric50 <- lm(herbivory.BU, formula = trichome ~ d50)
+mod.tric100 <- lm(herbivory.BU, formula = trichome ~ d100)
+mod.tric200 <- lm(herbivory.BU, formula = trichome ~ d200)
+mod.tric400 <- lm(herbivory.BU, formula = trichome ~ d400)
+mod.tric800 <- lm(herbivory.BU, formula = trichome ~ d800)
+mod.tric1600 <- lm(herbivory.BU, formula = trichome ~ d1600)
+mod.tric2400 <- lm(herbivory.BU, formula = trichome ~ d2400)
+mod.tric3200 <- lm(herbivory.BU, formula = trichome ~ d3200)
+
+AIC(mod.tric50, mod.tric100, mod.tric200, mod.tric400, mod.tric800, mod.tric1600, mod.tric2400, mod.tric3200)     #### d200 has lowest AIC score.
+summary(mod.tric200)
+
+```
+
+Results:
+(1) Visually, number of trichome decreases with increase in urbanisation.
+
+(2) Comparing AIC values of models, the model at 200m scale is best, with significantly negative correlation between "number of trichome" and urbanisation (p=1.63e-10, R2=0.366).
+
+# **4.3.2. Based on average data on RGR of each mother plant**
+
+```{r}
+# calculate mean number of trichome per genotype
+mean.tric <- ddply(herbivory.BU, "genotype", summarise,
+                  mean.tric = mean(trichome)
+                  )
+
+# combine spatial data with data on mean RGR
+tric.BU <- merge(mean.tric, BU, by = "genotype")
+
+# gather data 
+tric.BU.L <- gather(tric.BU, `d50`, `d100`, `d200`, `d400`, `d800`, `d1600`, `d2400`, `d3200`, 
+       key = "radii", value = "ratio.bu")
+
+# create the plot
+p.mtric <- ggplot(tric.BU.L) +
+  geom_point(mapping = aes(x = ratio.bu, y = mean.tric, colour = genotype)) +
+  facet_wrap(~ radii, nrow = 3) +
+  labs(title = "Mean number of trichome at 8 radii scales", x = "BU%", y = "mean number of trichome") +
+  geom_smooth(mapping = aes(x = ratio.bu, y = mean.tric), method = 'lm')
+p.mtric
+
+#make lm models
+mod.mtric50 <- lm(tric.BU, formula = mean.tric ~ d50)
+mod.mtric100 <- lm(tric.BU, formula = mean.tric ~ d100)
+mod.mtric200 <- lm(tric.BU, formula = mean.tric ~ d200)
+mod.mtric400 <- lm(tric.BU, formula = mean.tric ~ d400)
+mod.mtric800 <- lm(tric.BU, formula = mean.tric ~ d800)
+mod.mtric1600 <- lm(tric.BU, formula = mean.tric ~ d1600)
+mod.mtric2400 <- lm(tric.BU, formula = mean.tric ~ d2400)
+mod.mtric3200 <- lm(tric.BU, formula = mean.tric ~ d3200)
+
+AIC(mod.mtric50, mod.mtric100, mod.mtric200, mod.mtric400, mod.mtric800, mod.mtric1600, mod.mtric2400, mod.mtric3200)     #### d200 has lowest AIC score.
+summary(mod.mtric200)
+
+```
+
+Results:
+(1) Visually, number of trichome decreases with increase in urbanisation.
+
+(2) Comparing AIC values of models, the model at 200m scale is best, with significantly negative correlation between "number of trichome" and urbanisation (p=0.00225, R2=0.4173).
+
+
+
+# **5. Effects of herbivory on biomass for different genotypes**
+
+
+Effect of herbivory treatment on biomass in 18 genotypes. Make barplots on mean value of biomass in each genotype between two treatments(herbivory and control). And genotypes are arranged on x-axis with increase in urbanisation.
+
+```{r}
+## calculate root:shoot ratio in biomass: "plant.biomass"
+biomass_HT <- mutate(plant.biomass, ratio = BG.biomass/AG.biomass)
+
+# summarize the data:
+mass.geno <- ddply(biomass_HT, c("genotype", "treatment"), summarise,
+                   mAG = mean(AG.biomass),
+                   sd.AG =sd(AG.biomass),
+                   mBG = mean(BG.biomass),
+                   sd.BG = sd(BG.biomass),
+                   mratio = mean(ratio),
+                   sd.ratio = sd(ratio)
+                   )
+
+# add spatial data
+mass.geno.BU <- merge(mass.geno, BU, by="genotype")
+View(mass.geno.BU)
+
+mass.geno.BU$genotype <- as.factor(mass.geno.BU$genotype)
+
+```
+
+Use function geom_errorbar() to produce barplots with error bars: ordered with increase in urbanisation.
+
+# **5.1 AT 50m scale**
+
+```{r}
+# at 50m scale
+
+## order genotypes by specifying urbanisation at 50m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d50) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+
+## plot
+p.BG.50 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 50m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.50 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 50m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.50 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 50m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.50
+p.AG.50
+p.rs.50
+```
+
+
+
+# **5.2 AT 100m scale**
+
+```{r}
+## order genotypes by specifying urbanisation at 100m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d100) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+
+## plot
+p.BG.100 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 100m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.100 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 100m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.100 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 100m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.100
+p.AG.100
+p.rs.100
+```
+
+# **5.3 AT 200m scale**
+
+```{r}
+## order genotypes by specifying urbanisation at 200m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d200) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+## plot
+p.BG.200 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 200m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.200 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 200m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.200 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 200m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.200
+p.AG.200
+p.rs.200
+```
+
+
+# **5.4 AT 400m scale**
+
+```{r}
+## order genotypes by specifying urbanisation at 400m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d400) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+## plot
+p.BG.400 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 400m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.400 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 400m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.400 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 400m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.400
+p.AG.400
+p.rs.400
+```
+
+
+# **5.5 AT 800m scale**
+
+```{r}
+## order genotypes by specifying urbanisation at 800m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d800) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+## plot
+p.BG.800 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 800m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.800 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 800m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.800 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 800m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.800
+p.AG.800
+p.rs.800
+```
+
+
+# **5.6 AT 1600m scale**
+
+```{r}
+## order genotypes by specifying urbanisation at 1600m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d1600) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+## plot
+p.BG.1600 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 1600m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.1600 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 1600m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.1600 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 1600m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.1600
+p.AG.1600
+p.rs.1600
+```
+
+
+# **5.7 AT 2400m scale**
+
+```{r}
+## order genotypes by specifying urbanisation at 2400m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d2400) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+## plot
+p.BG.2400 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 2400m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.2400 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 2400m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.2400 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 2400m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.2400
+p.AG.2400
+p.rs.2400
+
+```
+
+# **5.8 AT 3200m scale**
+
+```{r}
+## order genotypes by specifying urbanisation at 3200m scale
+mass.geno.BU <- mass.geno.BU %>%
+  arrange(d3200) %>%
+  mutate(genotype = factor(genotype, unique(genotype)))
+## plot
+p.BG.3200 <- ggplot(mass.geno.BU, aes(x=genotype, y=mBG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mBG-sd.BG, ymax=mBG+sd.BG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass per genotype at 3200m scale", x = "Genotype", y = "Root mass (mg)") 
+
+p.AG.3200 <- ggplot(mass.geno.BU, aes(x=genotype, y=mAG, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mAG-sd.AG, ymax=mAG+sd.AG), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass per genotype at 3200m scale", x = "Genotype", y = "Shoot mass (mg)")
+
+p.rs.3200 <- ggplot(mass.geno.BU, aes(x=genotype, y=mratio, fill=treatment)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge()) +
+  geom_errorbar(aes(ymin=mratio-sd.ratio, ymax=mratio+sd.ratio), width=.4,
+                position = position_dodge(.9)) +
+  labs(title = "Ratio of root and shoot per genotype at 3200m scale", x = "Genotype", y = "Root/shoot")
+
+p.BG.3200
+p.AG.3200
+p.rs.3200
+
+```
+
+Results:
+(1) From these error bar plots, it is clear that treatment has no effect on root and shoot biomass of each genotype, while probable effect on root/shoot ratio.
+
+(2) There may be difference in root and shoot biomass among genotypes, while not in root/shoot ratio.
+
+(3) It seems that root and shoot biomass in urban area are larger than that in rural area.
+
+
+# **5.9 Perform lm model tests**
+
+Model: biomass ~ herbivory * genotype
+
+```{r}
+# select working dataframes:  "plant.biomass"
+## calculate root:shoot ratio of biomass: "plant.biomass"
+biomass_HT <- plant.biomass %>%
+  mutate(ratio = BG.biomass/AG.biomass)
+View(biomass_HT)
+
+#### lm test whether the effect of herbivory differs for different genotypes. 
+lm.BG <- lm(formula = BG.biomass ~ genotype*treatment, data = biomass_HT)
+summary(lm.BG)
+anova(lm.BG)
+
+lm.AG <- lm(formula = AG.biomass ~ genotype*treatment, data = biomass_HT)
+summary(lm.AG)
+anova(lm.AG)
+
+lm.ratio <- lm(formula = ratio ~ genotype*treatment, data = biomass_HT)
+summary(lm.ratio)
+anova(lm.ratio)
+
+#test differences of trichome between treatment and among genotypes
+## dataframe:"trichome"
+lm.trichome <- lm(formula = trichome ~ genotype*treatment, data = trichome)
+summary(lm.trichome)
+anova(lm.trichome)
+
+
+```
+
+Results:
+(1) There are no significant influences of herbivory treatment on root and shoot biomass and no differences among genotypes as well. 
+
+(2) However, a significant influence of treatment on root/shoot ratio (P = 0.0375).
+
+(3) Number of trichome differs among genotypes (P = <2e-16).
+
+
+
+
+# **6 Effects of herbivory on average biomass per genotype along with urbanisation** 
+
+Model: "average biomass per genotype" ~ herbivory * urbanization
+
+```{r}
+# load library
+library(lme4)
+# select working dataframes: "mass.geno.BU"(with means)
+```
+
+
+# **6.1 Effect of herbivory and urbanisation on average root biomass among genotypes**
+
+```{r}
+# create lm models
+
+lm.mr.50 <- lm(mBG ~ treatment*d50, data = mass.geno.BU)
+lm.mr.100 <- lm(mBG ~ treatment*d100, data = mass.geno.BU)
+lm.mr.200 <- lm(mBG ~ treatment*d200, data = mass.geno.BU)
+lm.mr.400 <- lm(mBG ~ treatment*d400, data = mass.geno.BU)
+lm.mr.800 <- lm(mBG ~ treatment*d800, data = mass.geno.BU)
+lm.mr.1600 <- lm(mBG ~ treatment*d1600, data = mass.geno.BU)
+lm.mr.2400 <- lm(mBG ~ treatment*d2400, data = mass.geno.BU)
+lm.mr.3200 <- lm(mBG ~ treatment*d3200, data = mass.geno.BU)
+
+AIC(lm.mr.50, lm.mr.100, lm.mr.200, lm.mr.400, lm.mr.800, lm.mr.1600, lm.mr.2400, lm.mr.3200)    ##### model at d200 has lowest AIC value.
+
+#summarize model d200
+summary(lm.mr.200)
+anova(lm.mr.200)
+
+# visualize residuals and fitted values.
+plot(lm.mr.200, pch=16, which=1)
+
+# plot mod d200
+p.mr.200 <- ggplot(mass.geno.BU, aes(d200, mBG, color = treatment)) +
+  geom_point() +
+  stat_smooth(method = "lm", fullrange=FALSE)
+p.mr.200
+
+
+```
+
+Results:
+(1) The best model is at 200m scale (R2=0.3046).
+
+(2) Treatment has no effect on average root biomass per genotype, while urbanisation (d200) has significant effect on it (P=0.0107).
+
+# **6.2 Effect of herbivory and urbanisation on average shoot biomass among genotypes**
+
+```{r}
+# create lm models
+
+lm.ms.50 <- lm(mAG ~ treatment*d50, data = mass.geno.BU)
+lm.ms.100 <- lm(mAG ~ treatment*d100, data = mass.geno.BU)
+lm.ms.200 <- lm(mAG ~ treatment*d200, data = mass.geno.BU)
+lm.ms.400 <- lm(mAG ~ treatment*d400, data = mass.geno.BU)
+lm.ms.800 <- lm(mAG ~ treatment*d800, data = mass.geno.BU)
+lm.ms.1600 <- lm(mAG ~ treatment*d1600, data = mass.geno.BU)
+lm.ms.2400 <- lm(mAG ~ treatment*d2400, data = mass.geno.BU)
+lm.ms.3200 <- lm(mAG ~ treatment*d3200, data = mass.geno.BU)
+
+AIC(lm.ms.50, lm.ms.100, lm.ms.200, lm.ms.400, lm.ms.800, lm.ms.1600, lm.ms.2400, lm.ms.3200)  ## model d100 has lowest AIC score.
+
+#summarize model d100
+summary(lm.ms.100)
+anova(lm.ms.100)
+
+# visualize residuals and fitted values.
+plot(lm.ms.100, pch=16, which=1)
+
+# plot
+p.ms.100 <- ggplot(mass.geno.BU, aes(d100, mAG, color = treatment)) +
+  geom_point() +
+  stat_smooth(method = "lm", fullrange=FALSE)
+p.ms.100
+
+
+
+```
+
+Results:
+(1) The best model is at 100m scale (R2=0.1722).
+
+(2) But both treatment and urbanisation do not have effects on average shoot biomass per genotype.
+
+
+# **6.3 Effect of herbivory and urbanisation on average ratio of root and shoot among genotypes**
+
+```{r}
+# create lm models
+lm.mrs.50 <- lm(mratio ~ treatment*d50, data = mass.geno.BU)
+lm.mrs.100 <- lm(mratio ~ treatment*d100, data = mass.geno.BU)
+lm.mrs.200 <- lm(mratio ~ treatment*d200, data = mass.geno.BU)
+lm.mrs.400 <- lm(mratio ~ treatment*d400, data = mass.geno.BU)
+lm.mrs.800 <- lm(mratio ~ treatment*d800, data = mass.geno.BU)
+lm.mrs.1600 <- lm(mratio ~ treatment*d1600, data = mass.geno.BU)
+lm.mrs.2400 <- lm(mratio ~ treatment*d2400, data = mass.geno.BU)
+lm.mrs.3200 <- lm(mratio ~ treatment*d3200, data = mass.geno.BU)
+
+AIC(lm.mrs.50, lm.mrs.100, lm.mrs.200, lm.mrs.400, lm.mrs.800, lm.mrs.1600, lm.mrs.2400, lm.mrs.3200)   ## model d800 has lowest AIC value.
+
+#summarize model d800
+summary(lm.mrs.800)
+anova(lm.mrs.800)
+
+# visualize residuals and fitted values.
+plot(lm.mrs.800, pch=16, which=1)
+
+# plot
+p.mrs.800 <- ggplot(mass.geno.BU, aes(d800, mratio, color = treatment)) +
+  geom_point() +
+  stat_smooth(method = "lm", fullrange=FALSE)
+p.mrs.800
+
+
+```
+
+Results:
+(1) The best model is at 800m scale (R2=0.08697).
+
+(2) But both treatment and urbanisation do not have effects on average shoot biomass per genotype.
+
+
+
+# **7. Differences of biomass along with urbanisation**
+
+Model: "difference between average biomass of a certain genotype in the herbivory and control treatment" ~ urbanization
+Test how the difference between herbivory and control changes with urbanization.
+
+```{r}
+# select working dataframe: "mass.geno.BU"(with means)
+
+# calculate difference of average biomass between herbivory and control treatment
+df <- data.frame(genotype = mass.geno.BU[mass.geno.BU$treatment == "C", "genotype"],
+                   df.BG = mass.geno.BU[mass.geno.BU$treatment == "C", "mBG"] - mass.geno.BU[mass.geno.BU$treatment == "H", "mBG"],
+                   df.AG = mass.geno.BU[mass.geno.BU$treatment == "C", "mAG"] - mass.geno.BU[mass.geno.BU$treatment == "H", "mAG"],
+                   df.rs = mass.geno.BU[mass.geno.BU$treatment == "C", "mratio"] - mass.geno.BU[mass.geno.BU$treatment == "H", "mratio"])
+
+# creat new working dataframe: merge "diff" and "BU"
+df.BU <- merge(df, BU, by = "genotype")
+View(df.BU)
+
+## Root biomass
+lm.dfBG.50 <- lm(df.BG ~ d50, data = df.BU)
+lm.dfBG.100 <- lm(df.BG ~ d100, data = df.BU)
+lm.dfBG.200 <- lm(df.BG ~ d200, data = df.BU)
+lm.dfBG.400 <- lm(df.BG ~ d400, data = df.BU)
+lm.dfBG.800 <- lm(df.BG ~ d800, data = df.BU)
+lm.dfBG.1600 <- lm(df.BG ~ d1600, data = df.BU)
+lm.dfBG.2400 <- lm(df.BG ~ d2400, data = df.BU)
+lm.dfBG.3200 <- lm(df.BG ~ d3200, data = df.BU)
+
+## shoot biomass
+lm.dfAG.50 <- lm(df.AG ~ d50, data = df.BU)
+lm.dfAG.100 <- lm(df.AG ~ d100, data = df.BU)
+lm.dfAG.200 <- lm(df.AG ~ d200, data = df.BU)
+lm.dfAG.400 <- lm(df.AG ~ d400, data = df.BU)
+lm.dfAG.800 <- lm(df.AG ~ d800, data = df.BU)
+lm.dfAG.1600 <- lm(df.AG ~ d1600, data = df.BU)
+lm.dfAG.2400 <- lm(df.AG ~ d2400, data = df.BU)
+lm.dfAG.3200 <- lm(df.AG ~ d3200, data = df.BU)
+
+## Root/shoot ratio
+lm.dfRS.50 <- lm(df.rs ~ d50, data = df.BU)
+lm.dfRS.100 <- lm(df.rs ~ d100, data = df.BU)
+lm.dfRS.200 <- lm(df.rs ~ d200, data = df.BU)
+lm.dfRS.400 <- lm(df.rs ~ d400, data = df.BU)
+lm.dfRS.800 <- lm(df.rs ~ d800, data = df.BU)
+lm.dfRS.1600 <- lm(df.rs ~ d1600, data = df.BU)
+lm.dfRS.2400 <- lm(df.rs ~ d2400, data = df.BU)
+lm.dfRS.3200 <- lm(df.rs ~ d3200, data = df.BU)
+
+
+## Model selection
+AIC(lm.dfBG.50, lm.dfBG.100, lm.dfBG.200, lm.dfBG.400, lm.dfBG.800, lm.dfBG.1600, lm.dfBG.2400, lm.dfBG.3200)   ## model d800 has lowest AIC value.
+AIC(lm.dfAG.50, lm.dfAG.100, lm.dfAG.200, lm.dfAG.400, lm.dfAG.800, lm.dfAG.1600, lm.dfAG.2400, lm.dfAG.3200)   ## model d800 has lowest AIC value.
+AIC(lm.dfRS.50, lm.dfRS.100, lm.dfRS.200, lm.dfRS.400, lm.dfRS.800, lm.dfRS.1600, lm.dfRS.2400, lm.dfRS.3200)   ## model d200 has lowest AIC value.
+
+## summarize best models
+summary(lm.dfBG.800)
+summary(lm.dfAG.800)
+summary(lm.dfRS.200)
+```
+
+Results:
+(1) The model d800 is best for "difference in root biomass" (R2=0.1) and "difference in shoot biomass"(R2=0.1805).
+
+(2) No significant difference is shown for "difference in root biomass".
+
+(3) Although significant p-values of urbanisation are shown for shoot biomass (d800, p=0.04469) and root/shoot ratio (d200, p=0.0439), both models possess lower R2 (0.1805, 0.1821) and F values but larger residual standard errors compared to their means.
+
+# **8. Difference of urban and rural genotypes**
+
+Model: biomass ~ herbivory + genotype + herbivory x genotype + urbanization(categorical) + herbivory x urbanization(categorical)
+
+# **8.1 at 50m scale**
+
+```{r}
+# select working dataframes: "biomass_HT", "BU"
+
+# categorize as rural and urban groups
+urban50 <- BU %>% top_n(9, d50)      ###select the most urban genotypes
+urban50 <- cbind(habitat = "urban", urban50)      ###add a new column marked as "urban" habitat 
+
+rural50 <- BU %>% top_n(-9, d50)     ###select the most rural genotypes
+rural50 <- cbind(habitat = "rural", rural50)      ###add a new column marked as "rural" habitat 
+
+ru50 <- rbind(urban50, rural50)
+
+bm.BU.50 <- merge(biomass_HT, ru50, by = "genotype")
+View(bm.BU.50)
+
+# create models
+## shoot biomass
+mod.AG.ru50 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+
+## root biomass
+mod.BG.ru50 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+
+## root/shoot ratio
+mod.rs.ru50 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+
+## number of trichome
+mod.tric.ru50 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+
+```
+
+
+# **8.2 at 100m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban100 <- BU %>% top_n(9, d100)      ###select the most urban genotypes
+urban100 <- cbind(habitat = "urban", urban100)      ###add a new column marked as "urban" habitat 
+
+rural100 <- BU %>% top_n(-9, d100)     ###select the most rural genotypes
+rural100 <- cbind(habitat = "rural", rural100)      ###add a new column marked as "rural" habitat 
+
+ru100 <- rbind(urban100, rural100)
+
+bm.BU.100 <- merge(biomass_HT, ru100, by = "genotype")
+
+# create models
+mod.AG.ru100 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.100)
+mod.BG.ru100 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.100)
+mod.rs.ru100 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.100)
+mod.tric.ru100 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.100)
+
+```
+
+
+# **8.3 at 200m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban200 <- BU %>% top_n(9, d200)      ###select the most urban genotypes
+urban200 <- cbind(habitat = "urban", urban200)      ###add a new column marked as "urban" habitat 
+
+rural200 <- BU %>% top_n(-9, d200)     ###select the most rural genotypes
+rural200 <- cbind(habitat = "rural", rural200)      ###add a new column marked as "rural" habitat 
+
+ru200 <- rbind(urban200, rural200)
+
+bm.BU.200 <- merge(biomass_HT, ru200, by = "genotype")
+
+# create models
+mod.AG.ru200 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.200)
+mod.BG.ru200 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.200)
+mod.rs.ru200 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.200)
+mod.tric.ru200 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.200)
+
+```
+
+
+
+# **8.4 at 400m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban400 <- BU %>% top_n(9, d400)      ###select the most urban genotypes
+urban400 <- cbind(habitat = "urban", urban400)      ###add a new column marked as "urban" habitat 
+
+rural400 <- BU %>% top_n(-9, d400)     ###select the most rural genotypes
+rural400 <- cbind(habitat = "rural", rural400)      ###add a new column marked as "rural" habitat 
+
+ru400 <- rbind(urban400, rural400)
+
+bm.BU.400 <- merge(biomass_HT, ru400, by = "genotype")
+
+# create models
+mod.AG.ru400 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.400)
+mod.BG.ru400 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.400)
+mod.rs.ru400 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.400)
+mod.tric.ru400 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.400)
+
+```
+
+
+
+# **8.5 at 800m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban800 <- BU %>% top_n(9, d800)      ###select the most urban genotypes
+urban800 <- cbind(habitat = "urban", urban800)      ###add a new column marked as "urban" habitat 
+
+rural800 <- BU %>% top_n(-9, d800)     ###select the most rural genotypes
+rural800 <- cbind(habitat = "rural", rural800)      ###add a new column marked as "rural" habitat 
+
+ru800 <- rbind(urban800, rural800)
+
+bm.BU.800 <- merge(biomass_HT, ru800, by = "genotype")
+
+# create models
+mod.AG.ru800 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.800)
+mod.BG.ru800 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.800)
+mod.rs.ru800 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.800)
+mod.tric.ru800 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.800)
+
+```
+
+
+# **8.6 at 1600m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban1600 <- BU %>% top_n(9, d1600)      ###select the most urban genotypes
+urban1600 <- cbind(habitat = "urban", urban1600)      ###add a new column marked as "urban" habitat 
+
+rural1600 <- BU %>% top_n(-9, d1600)     ###select the most rural genotypes
+rural1600 <- cbind(habitat = "rural", rural1600)      ###add a new column marked as "rural" habitat 
+
+ru1600 <- rbind(urban1600, rural1600)
+
+bm.BU.1600 <- merge(biomass_HT, ru1600, by = "genotype")
+
+# create models
+mod.AG.ru1600 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.1600)
+mod.BG.ru1600 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.1600)
+mod.rs.ru1600 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.1600)
+mod.tric.ru1600 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.1600)
+
+```
+
+
+# **8.7 at 2400m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban2400 <- BU %>% top_n(9, d2400)      ###select the most urban genotypes
+urban2400 <- cbind(habitat = "urban", urban2400)      ###add a new column marked as "urban" habitat 
+
+rural2400 <- BU %>% top_n(-9, d2400)     ###select the most rural genotypes
+rural2400 <- cbind(habitat = "rural", rural2400)      ###add a new column marked as "rural" habitat 
+
+ru2400 <- rbind(urban2400, rural2400)
+
+bm.BU.2400 <- merge(biomass_HT, ru2400, by = "genotype")
+
+# create models
+mod.AG.ru2400 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.2400)
+mod.BG.ru2400 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.2400)
+mod.rs.ru2400 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.2400)
+mod.tric.ru2400 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.2400)
+
+```
+
+
+
+# **8.8 at 3200m scale**
+
+```{r}
+# categorize as rural and urban groups
+urban3200 <- BU %>% top_n(9, d3200)      ###select the most urban genotypes
+urban3200 <- cbind(habitat = "urban", urban3200)      ###add a new column marked as "urban" habitat 
+
+rural3200 <- BU %>% top_n(-9, d3200)     ###select the most rural genotypes
+rural3200 <- cbind(habitat = "rural", rural3200)      ###add a new column marked as "rural" habitat 
+
+ru3200 <- rbind(urban3200, rural3200)
+
+bm.BU.3200 <- merge(biomass_HT, ru3200, by = "genotype")
+
+# create modelss
+mod.AG.ru3200 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.3200)
+mod.BG.ru3200 <- lm(BG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.3200)
+mod.rs.ru3200 <- lm(ratio ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.3200)
+mod.tric.ru3200 <- lm(trichome ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.3200)
+
+```
+
+
+# **8.9 Select the best models based on AIC**
+
+```{r}
+AIC.AG <- AIC(mod.AG.ru50, mod.AG.ru100, mod.AG.ru200, mod.AG.ru400, mod.AG.ru800, mod.AG.ru1600, mod.AG.ru2400, mod.AG.ru3200)  ## Models (1600m, 2400m and 3200m) have same lowest AIC value.
+AIC.BG <- AIC(mod.BG.ru50, mod.BG.ru100, mod.BG.ru200, mod.BG.ru400, mod.BG.ru800, mod.BG.ru1600, mod.BG.ru2400, mod.BG.ru3200)  ## Models (200m, 800m, 1600m, 2400m and 3200m) have same lowest AIC value.
+AIC.ratio <- AIC(mod.rs.ru50, mod.rs.ru100, mod.rs.ru200, mod.rs.ru400, mod.rs.ru800, mod.rs.ru1600, mod.rs.ru2400, mod.rs.ru3200)  ## Models (200m and 800m) have same lowest AIC value.
+AIC.tric <- AIC(mod.tric.ru50, mod.tric.ru100, mod.tric.ru200, mod.tric.ru400, mod.tric.ru800, mod.tric.ru1600, mod.tric.ru2400, mod.tric.ru3200)   ## Models (1600m, 2400m and 3200m) have same lowest AIC value.
+
+AIC.AG
+AIC.BG
+AIC.ratio
+AIC.tric
+```
+
+Results:
+For shoot biomass, three models (1600m, 2400m and 3200m) have same lowest AIC value.
+
+For root biomass, five models (200m, 800m, 1600m, 2400m and 3200m) have same lowest AIC value.
+
+For root/shoot ratio, two models (200m and 800m) have same lowest AIC value.
+
+For number of trichome, three models (1600m, 2400m and 3200m) have same lowest AIC value.
+
+```{r}
+# summarize the best models
+summary(mod.AG.ru3200)
+summary(mod.BG.ru3200)
+summary(mod.rs.ru200)
+summary(mod.tric.ru3200)
+```
+
+Results:
+(1) For shoot biomass:  There are remarkable differences among genotypes (P=0.00016) and betweent habitats (P=6.90e-07). But the model yields low R2 (0.2495) and low F-value (12.9 on 5 and 174 DF) and larger Residual standard error (0.02752) compared to the mean biomass (0.0581).
+
+(2) For root biomass: Same results as shoot biomass are shown. There are remarkable differences among genotypes (P=0.000185) and betweent habitats (P=2.04e-07). But the model yields low R2 (0.2418) and low F-value (12.42 on 5 and 174 DF) and larger Residual standard error (0.008017) compared to the mean biomass (1.415e-02).
+
+(3) For root/shoot ratio: Only difference in rural area (P=0.0244) is shown. But the model has very low R2 (0.0271).
+
+(4) For number of trichome, there are remarkable differences among genotypes (P=0.00661) and betweent habitats (P=4.12e-09). But the model yields low R2 (0.2605) and low F-value (13.61 on 5 and 174 DF) and larger Residual standard error (12.89) compared to the mean biomass (33.26270).
+
+
+# **8.10 Plot the best models**
+
+```{r}
+# Calculate mean and sd:
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE),
+      se = sd(x[[col]])/sqrt(length(x)))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func, varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+
+
+## plots at 1600m scale for root and shoot biomass
+sum.AG1600 <- data_summary(bm.BU.1600,
+                        varname = "AG.biomass",
+                        groupnames = c("habitat", "treatment"))
+
+sum.BG1600 <- data_summary(bm.BU.1600,
+                        varname = "BG.biomass",
+                        groupnames = c("habitat", "treatment"))
+
+sum.tric1600 <- data_summary(bm.BU.1600,
+                        varname = "trichome",
+                        groupnames = c("habitat", "treatment"))
+
+
+
+p.modAG <- ggplot(sum.AG1600, aes(x = habitat, y = AG.biomass, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = AG.biomass - sd, ymax = AG.biomass + sd), width=.2,
+                position = position_dodge(.9)) +
+  labs(title = "Aboveground shoot biomass", x = "Habitat", y = "Shoot mass (mg)")
+
+p.modBG <- ggplot(sum.BG1600, aes(x = habitat, y = BG.biomass, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = BG.biomass - sd, ymax = BG.biomass + sd), width=.2,
+                position = position_dodge(.9)) +
+  labs(title = "Belowground root biomass", x = "Habitat", y = "Root mass (mg)")
+
+p.modtric <- ggplot(sum.tric1600, aes(x = habitat, y = trichome, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = trichome - sd, ymax = trichome + sd), width=.2,
+                position = position_dodge(.9)) +
+  labs(title = "Number of trichome", x = "Habitat", y = "Number of trichome")
+
+p.modAG
+p.modBG
+p.modtric
+
+## plot at 200m scale for root/shoot ratio
+sum.ratio200 <- data_summary(bm.BU.200,
+                        varname = "ratio",
+                        groupnames = c("habitat", "treatment"))
+
+p.modratio <- ggplot(sum.ratio200, aes(x = habitat, y = ratio, fill = treatment)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = ratio - sd, ymax = ratio + sd), width=.2,
+                position = position_dodge(.9)) +
+  labs(title = "Root/shoot ratio", x = "Habitat", y = "root/shoot")
+p.modratio
+
+
+```
+
+
+
+# **9. Plot biomass and built-up ratio grouped by habitat and treatment**
+
+Plot all individual data.
+
+```{r}
+
+
+## plot them
+mod.AG.ru50 <- lm(AG.biomass ~ treatment + genotype + treatment*genotype + habitat + treatment*habitat, data = bm.BU.50)
+dp.AG50 <- ggplot(bm.BU.50, aes(x=d50, y=AG.biomass)) +
+  geom_point() 
+
+dp.AG50
+
+ggplot(bm.BU.50, aes(x=d50, y=AG.biomass, shape=habitat, color=treatment)) +
+  geom_point() +
+  geom_smooth(method="lm", se=FALSE)
+```
+
+
